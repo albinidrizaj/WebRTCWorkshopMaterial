@@ -1,0 +1,256 @@
+{\rtf1\ansi\ansicpg1252\cocoartf1348\cocoasubrtf170
+{\fonttbl\f0\fmodern\fcharset0 Courier;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;}
+\paperw11900\paperh16840\margl1440\margr1440\vieww10800\viewh8400\viewkind0
+\deftab720
+\pard\pardeftab720
+
+\f0\fs24 \cf2 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec2 var localRTCPeerConnection = false;\
+var remoteRTCPeerConnection = false;\
+\
+var localVideoElement = false;\
+var remoteVideoElement = false;\
+\
+var localVideoStream = false;\
+\
+var localCandidates = [];\
+var remoteCandidates = [];\
+\
+function getUserMedia() \{\
+    return new Promise(function(resolve, reject) \{\
+      navigator.mediaDevices.getUserMedia(\{ //Crossbrowser notice\
+          'audio': false,\
+          'video': \{\
+            'width': 320,\
+            'height': 240,\
+          \}\
+      \}).then(function(stream) \{\
+        console.log('Media permission provided.');\
+        resolve(stream);\
+      \},\
+      function() \{\
+        console.log('Media permission refused.');\
+        reject();\
+      \})\
+    \});\
+\}\
+\
+\
+function createPeerConnection() \{\
+    return new Promise(function(resolve, reject) \{\
+        localRTCPeerConnection = new RTCPeerConnection(\{\
+          'iceServers': getIceServers(),\
+          'mandatory': getConstraints()\
+        \}); //Crossbrowser notices\
+\
+        remoteRTCPeerConnection = new RTCPeerConnection(\{\
+          'iceServers': getIceServers(),\
+          'mandatory': getConstraints()\
+        \});\
+        console.log('Local and remote peer connection created.');\
+        resolve();\
+    \})\
+   //Crossbrowser notices\
+\}\
+\
+function setStream() \{\
+    return new Promise(function(resolve, reject) \{\
+        console.log('Attach strem to the peer connection.');\
+        localRTCPeerConnection.addStream(localVideoStream);\
+        resolve();\
+    \});\
+\};\
+\
+function setRemoteStream(event) \{\
+    if(!event.stream) \{return;\}\
+    var streamBlobLink = window.URL.createObjectURL(event.stream);\
+    remoteVideoElement.setAttribute('src', streamBlobLink);\
+\}\
+\
+function setLocalStream(stream) \{\
+    return new Promise(function(resolve, reject) \{\
+        var streamBlobLink = window.URL.createObjectURL(stream);\
+        localVideoStream = stream;\
+        localVideoElement.setAttribute('src', streamBlobLink);\
+        resolve();\
+    \});\
+\}\
+\
+function onStreamListener() \{\
+    return new Promise(function(resolve, reject) \{\
+        remoteRTCPeerConnection.onaddstream = setRemoteStream;\
+        console.log('Add stream listener.');\
+        resolve();\
+    \});\
+\}\
+\
+function setIceCandidateListener() \{\
+  return new Promise(function(resolve, reject) \{\
+      function saveCandidate(where, event) \{\
+          if (!event || !event.candidate) return;\
+\
+          switch(where) \{\
+              case 'local':\
+                  localCandidates.push(event.candidate);\
+              break;\
+              case 'remote':\
+                  remoteCandidates.push(event.candidate);\
+              break;\
+          \}\
+      \}\
+\
+      localRTCPeerConnection.onicecandidate = function(event) \{\
+          saveCandidate('local', event);\
+      \}\
+\
+      remoteRTCPeerConnection.onicecandidate = function(event) \{\
+          saveCandidate('remote', event);\
+      \}\
+\
+      console.log('Set candidate listener.');\
+      resolve();\
+  \});\
+\}\
+\
+function createOffer() \{\
+    return new Promise(function(resolve, reject) \{\
+        localRTCPeerConnection.createOffer(\
+          function(offer) \{\
+              localRTCPeerConnection.setLocalDescription(\
+                offer,\
+                function() \{\
+                    console.log('Done /w setting the local description for local client.');\
+                    resolve(offer);\
+                \},\
+                function() \{\
+                    console.log('Setting the local description for local client FAILED.');\
+                    reject();\
+                \}\
+              );\
+          \},\
+          function(error) \{\
+              console.log('Cannot create an offer!');\
+              console.log(error);\
+              reject();\
+          \},\
+          \{\
+            'mandatory': getConstraints()\
+          \}\
+        );\
+    \});\
+\}\
+\
+function createAnswer(offer) \{\
+    return new Promise(function(resolve, reject) \{\
+        remoteRTCPeerConnection.setRemoteDescription(\
+          offer,\
+          function() \{\
+              console.log('Offer saved as remote description.');\
+              remoteRTCPeerConnection.createAnswer(\
+                  function(answer) \{\
+                      console.log('Answer created to the offer');\
+                      remoteRTCPeerConnection.setLocalDescription(\
+                          answer,\
+                          function() \{\
+                              console.log('Local description attached to remote peer connection.')\
+                              resolve(answer);\
+                          \},\
+                          function(error) \{\
+                              console.log('Failed to attach description attached to remote peer connection.')\
+                              reject(error);\
+                          \}\
+                      );\
+                  \},\
+                  function(error) \{\
+                      reject(error);\
+                      console.log('Failed to create an answer.');\
+                  \},\
+                  \{\
+                    'mandatory': getConstraints()\
+                  \}\
+              );\
+          \},\
+          function() \{\
+              console.log('Failed to save offer as remote description.');\
+          \}\
+        )\
+    \});\
+\}\
+\
+function setAnswerAsLocalSDP(answer) \{\
+    return new Promise(function(resolve, reject) \{\
+        localRTCPeerConnection.setRemoteDescription(\
+          answer,\
+          function() \{\
+              console.log('Remote description is set on local peer connection.');\
+              resolve();\
+          \},\
+          function(error) \{\
+              console.log('Failed to set remote description local peer connection.');\
+              reject(error);\
+          \}\
+        )\
+    \});\
+\}\
+\
+function solveCandidates() \{\
+    return new Promise(function(resolve, reject) \{\
+        setTimeout(function() \{\
+            localCandidates.forEach(function(candidate) \{\
+                remoteRTCPeerConnection.addIceCandidate (\
+                  candidate,\
+                  function() \{\
+                      console.log('Candidate successfully added.');\
+                  \},\
+                  function() \{\
+                      console.log('Cannot add candidate.');\
+                  \}\
+                );//new RTCIceCandidate\
+            \});\
+\
+            remoteCandidates.forEach(function(candidate) \{\
+                localRTCPeerConnection.addIceCandidate (\
+                  candidate,\
+                  function() \{\
+                      console.log('Candidate successfully added.');\
+                  \},\
+                  function() \{\
+                      console.log('Cannot add candidate.');\
+                  \}\
+                );\
+            \});\
+        \}, 3000);\
+    \});\
+\}\
+\
+function getIceServers() \{\
+    return [\{urls: "stun:23.21.150.121"\}, \{urls: "stun:stun.l.google.com:19302"\}];\
+\}\
+\
+function getConstraints() \{\
+    return \{'offerToReceiveAudio': false,'offerToReceiveVideo': true\};\
+\}\
+\
+function start() \{\
+    getUserMedia()\
+    .then(setLocalStream)\
+    .then(createPeerConnection)\
+    .then(setStream)\
+    .then(onStreamListener)\
+    .then(setIceCandidateListener)\
+    .then(createOffer)\
+    .then(createAnswer)\
+    .then(setAnswerAsLocalSDP)\
+    .then(solveCandidates)\
+    .catch(function(error) \{\
+        console.log('Error: ', error);\
+    \});\
+\}\
+\
+window.addEventListener('load', function() \{\
+    localVideoElement = document.querySelector('.local');\
+    remoteVideoElement = document.querySelector('.remote');\
+    document.querySelector('.lets-go').addEventListener('click', start);\
+\});\
+}
