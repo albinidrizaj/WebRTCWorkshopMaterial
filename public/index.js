@@ -1,240 +1,203 @@
-var localRTCPeerConnection = false;
-var remoteRTCPeerConnection = false;
-
+var pc1 = false;
+var pc2 = false;
 var localVideoElement = false;
 var remoteVideoElement = false;
-
 var localVideoStream = false;
-
-var localCandidates = [];
-var remoteCandidates = [];
+var offerOptions = {
+  offerToReceiveAudio: 1,
+  offerToReceiveVideo: 1
+};
 
 function getUserMedia() {
     return new Promise(function(resolve, reject) {
       navigator.mediaDevices.getUserMedia({ //Crossbrowser notice
           'audio': false,
-          'video': {
-            'width': 320,
-            'height': 240,
-          }
+          'video': true
       }).then(function(stream) {
-        console.log('Media permission provided.');
+        console.log('MEDIA: ok');
         resolve(stream);
       },
-      function() {
-        console.log('Media permission refused.');
-        reject();
-      })
+      reject)
     });
-}
-
-
-function createPeerConnection() {
-    return new Promise(function(resolve, reject) {
-        localRTCPeerConnection = new RTCPeerConnection({
-          'iceServers': getIceServers(),
-          'mandatory': getConstraints()
-        }); //Crossbrowser notices
-
-        remoteRTCPeerConnection = new RTCPeerConnection({
-          'iceServers': getIceServers(),
-          'mandatory': getConstraints()
-        });
-        console.log('Local and remote peer connection created.');
-        resolve();
-    })
-   //Crossbrowser notices
-}
-
-function setStream() {
-    return new Promise(function(resolve, reject) {
-        console.log('Attach strem to the peer connection.');
-        localRTCPeerConnection.addStream(localVideoStream);
-        resolve();
-    });
-};
-
-function setRemoteStream(event) {
-    if(!event.stream) {return;}
-    var streamBlobLink = window.URL.createObjectURL(event.stream);
-    remoteVideoElement.setAttribute('src', streamBlobLink);
 }
 
 function setLocalStream(stream) {
-    return new Promise(function(resolve, reject) {
-        var streamBlobLink = window.URL.createObjectURL(stream);
+    return new Promise(function(resolve) {
         localVideoStream = stream;
-        localVideoElement.setAttribute('src', streamBlobLink);
+        localVideoElement.srcObject = stream;
+        console.log('LOCAL STREAM: ok');
         resolve();
     });
 }
 
-function onStreamListener() {
-    return new Promise(function(resolve, reject) {
-        remoteRTCPeerConnection.onaddstream = setRemoteStream;
-        console.log('Add stream listener.');
-        resolve();
-    });
-}
+function createPeerConnection() {
+  return new Promise(function(resolve) {
+    servers = null;
+    if(typeof webkitRTCPeerConnection === 'undefined') {
+      webkitRTCPeerConnection = RTCPeerConnection;
+    }
+    pc1 = new webkitRTCPeerConnection(servers);
+    console.log('PC1: ok');
+    pc1.onicecandidate = function(e) {
+      onIceCandidate(pc1, e);
+    };
 
-function setIceCandidateListener() {
-  return new Promise(function(resolve, reject) {
-      function saveCandidate(where, event) {
-          if (!event || !event.candidate) return;
+    pc2 = new webkitRTCPeerConnection(servers);
+    console.log('PC2: ok');
+    pc2.onicecandidate = function(e) {
+      onIceCandidate(pc2, e);
+    };
 
-          switch(where) {
-              case 'local':
-                  localCandidates.push(event.candidate);
-              break;
-              case 'remote':
-                  remoteCandidates.push(event.candidate);
-              break;
-          }
-      }
-
-      localRTCPeerConnection.onicecandidate = function(event) {
-          saveCandidate('local', event);
-      }
-
-      remoteRTCPeerConnection.onicecandidate = function(event) {
-          saveCandidate('remote', event);
-      }
-
-      console.log('Set candidate listener.');
-      resolve();
+    resolve();
   });
 }
 
+function onAddStreamEvent () {
+  return new Promise(function(resolve) {
+    pc2.onaddstream = gotRemoteStream;
+    console.log('PC2 STEAM LISTENER: ok');
+    resolve();
+  });
+}
+
+function addStreamToPC1() {
+  return new Promise(function(resolve) {
+    pc1.addStream(localVideoStream);
+    console.log('PC1 ADD STREAM: ok');
+    resolve();
+  })
+}
+
 function createOffer() {
-    return new Promise(function(resolve, reject) {
-        localRTCPeerConnection.createOffer(
-          function(offer) {
-              localRTCPeerConnection.setLocalDescription(
-                offer,
-                function() {
-                    console.log('Done /w setting the local description for local client.');
-                    resolve(offer);
-                },
-                function() {
-                    console.log('Setting the local description for local client FAILED.');
-                    reject();
-                }
-              );
-          },
-          function(error) {
-              console.log('Cannot create an offer!');
-              console.log(error);
-              reject();
-          },
-          {
-            'mandatory': getConstraints()
-          }
-        );
-    });
+  return new Promise(function(resolve) {
+      pc1.createOffer(
+        offerOptions
+      ).then(
+        function(offer) {
+          console.log('CREATE OFFER: ok');
+          resolve(offer)
+        }
+      );
+  });
 }
 
-function createAnswer(offer) {
-    return new Promise(function(resolve, reject) {
-        remoteRTCPeerConnection.setRemoteDescription(
-          offer,
-          function() {
-              console.log('Offer saved as remote description.');
-              remoteRTCPeerConnection.createAnswer(
-                  function(answer) {
-                      console.log('Answer created to the offer');
-                      remoteRTCPeerConnection.setLocalDescription(
-                          answer,
-                          function() {
-                              console.log('Local description attached to remote peer connection.')
-                              resolve(answer);
-                          },
-                          function(error) {
-                              console.log('Failed to attach description attached to remote peer connection.')
-                              reject(error);
-                          }
-                      );
-                  },
-                  function(error) {
-                      reject(error);
-                      console.log('Failed to create an answer.');
-                  },
-                  {
-                    'mandatory': getConstraints()
-                  }
-              );
-          },
-          function() {
-              console.log('Failed to save offer as remote description.');
-          }
-        )
-    });
+
+function setLocalDescForPC1(offer) {
+  return new Promise(function(resolve) {
+    pc1.setLocalDescription(offer)
+    .then(function() {
+      console.log('setLocalDescForPC1: ok');
+      resolve(offer);
+    })
+  });
 }
 
-function setAnswerAsLocalSDP(answer) {
-    return new Promise(function(resolve, reject) {
-        localRTCPeerConnection.setRemoteDescription(
-          answer,
-          function() {
-              console.log('Remote description is set on local peer connection.');
-              resolve();
-          },
-          function(error) {
-              console.log('Failed to set remote description local peer connection.');
-              reject(error);
-          }
-        )
-    });
+function setRemoteDescForPC2(offer) {
+  return new Promise(function(resolve) {
+    pc2.setRemoteDescription(offer).then(
+      function() {
+        console.log('setRemoteDescription: ok');
+        resolve(offer);
+      }
+    );
+  })
 }
 
-function solveCandidates() {
-    return new Promise(function(resolve, reject) {
-        setTimeout(function() {
-            localCandidates.forEach(function(candidate) {
-                remoteRTCPeerConnection.addIceCandidate (
-                  candidate,
-                  function() {
-                      console.log('Candidate successfully added.');
-                  },
-                  function() {
-                      console.log('Cannot add candidate.');
-                  }
-                );//new RTCIceCandidate
-            });
 
-            remoteCandidates.forEach(function(candidate) {
-                localRTCPeerConnection.addIceCandidate (
-                  candidate,
-                  function() {
-                      console.log('Candidate successfully added.');
-                  },
-                  function() {
-                      console.log('Cannot add candidate.');
-                  }
-                );
-            });
-        }, 3000);
-    });
+function createAnswer() {
+  return new Promise(function(resolve){
+    pc2.createAnswer().then(
+      function(answer) {
+        console.log('CREAT ANSWER: ok');
+        resolve(answer);
+      }
+    );
+  });
 }
 
-function getIceServers() {
-    return [{urls: "stun:23.21.150.121"}, {urls: "stun:stun.l.google.com:19302"}];
+function setLocalDescForPC2(answer) {
+  return new Promise(function(resolve) {
+    pc2.setLocalDescription(answer).then(
+      function() {
+        console.log('setLocalDescForPC2: ok');
+        resolve(answer)
+      }
+    );
+  })
 }
 
-function getConstraints() {
-    return {'offerToReceiveAudio': false,'offerToReceiveVideo': true};
+function setRemoteDescForPC1(answer) {
+  return new Promise(function(resolve) {
+    pc1.setRemoteDescription(answer).then(
+      resolve
+    );
+  })
 }
 
-function start() {
+function onCreateAnswerSuccess(desc) {
+  console.log('Answer from pc2:\n' + desc.sdp);
+  console.log('pc2 setLocalDescription start');
+  pc2.setLocalDescription(desc).then(
+    function() {
+      console.log('pc2');
+    },
+    function() {
+      console.log('onSetSessionDescriptionError')
+    }
+  );
+  console.log('pc1 setRemoteDescription start');
+  pc1.setRemoteDescription(desc).then(
+    function() {
+      console.log('pc1');
+    },
+    function() {
+      console.log('onSetSessionDescriptionError')
+    }
+  );
+}
+
+
+function gotRemoteStream(e) {
+  remoteVideoElement.srcObject = e.stream;
+}
+
+function onIceCandidate(pc, event) {
+  if (event.candidate) {
+    getOtherPc(pc).addIceCandidate(
+      new RTCIceCandidate(event.candidate)
+    ).then(
+      function() {
+        console.log('ICE CANDIDATE ADD: success')
+      },
+      function(err) {
+        console.log('ICE CANDIDATE ADD: failed')
+      }
+    );
+  }
+}
+
+function getOtherPc(pc) {
+  return (pc === pc1) ? pc2 : pc1;
+}
+
+function getcam() {
     getUserMedia()
     .then(setLocalStream)
-    .then(createPeerConnection)
-    .then(setStream)
-    .then(onStreamListener)
-    .then(setIceCandidateListener)
+    .catch(function(error) {
+        console.log('Error: ', error);
+    });
+}
+
+function p2p() {
+  createPeerConnection()
+    .then(onAddStreamEvent)
+    .then(addStreamToPC1)
     .then(createOffer)
+    .then(setLocalDescForPC1)
+    .then(setRemoteDescForPC2)
     .then(createAnswer)
-    .then(setAnswerAsLocalSDP)
-    .then(solveCandidates)
+    .then(setLocalDescForPC2)
+    .then(setRemoteDescForPC1)
     .catch(function(error) {
         console.log('Error: ', error);
     });
@@ -243,5 +206,6 @@ function start() {
 window.addEventListener('load', function() {
     localVideoElement = document.querySelector('.local');
     remoteVideoElement = document.querySelector('.remote');
-    document.querySelector('.lets-go').addEventListener('click', start);
+    document.querySelector('.get-cam').addEventListener('click', getcam);
+    document.querySelector('.lets-go').addEventListener('click', p2p);
 });

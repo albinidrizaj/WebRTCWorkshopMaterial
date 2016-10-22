@@ -2,6 +2,9 @@
   border: 1px solid black;
 }
 
-.lets-go {
+
+.lets-go,
+.get-cam
+ {
   display: block;
 }
