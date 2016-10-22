@@ -131,6 +131,7 @@ function setRemoteDescForPC1(answer) {
     pc1.setRemoteDescription(answer).then(
       resolve
     );
+    console.log('setRemoteDescForPC1: ok');
   })
 }
 
@@ -203,9 +204,20 @@ function p2p() {
     });
 }
 
+function closeconnection() {
+  pc1.close();
+  pc2.close();
+  pc1 = false;
+  pc2 = false;
+  localVideoElement.pause();
+  remoteVideoElement.pause();
+  localVideoStream = false;
+}
+
 window.addEventListener('load', function() {
     localVideoElement = document.querySelector('.local');
     remoteVideoElement = document.querySelector('.remote');
     document.querySelector('.get-cam').addEventListener('click', getcam);
     document.querySelector('.lets-go').addEventListener('click', p2p);
+    document.querySelector('.close').addEventListener('click', closeconnection);
 });
